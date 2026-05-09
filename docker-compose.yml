@@ -1,0 +1,84 @@
+services:
+
+  # ── Feedback + vector store (pgvector) ───────────────────────────────────────
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: sqlassistant_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: sqlassistant
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d sqlassistant"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Sales target database (plain postgres + init script) ─────────────────────
+  salesdb:
+    image: postgres:16-alpine
+    container_name: sqlassistant_salesdb
+    environment:
+      POSTGRES_USER: sales_user
+      POSTGRES_PASSWORD: sales_pass
+      POSTGRES_DB: sales
+    ports:
+      - "5433:5432"           # exposed on 5433 so it doesn't clash with db
+    volumes:
+      - salesdata:/var/lib/postgresql/data
+      - ./salesdb/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sales_user -d sales"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── FastAPI backend ───────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sqlassistant_backend
+    ports:
+      - "8000:8000"
+    environment:
+      # Feedback / vector store
+      DATABASE_URL: postgresql://postgres:password@db:5432/sqlassistant
+      # Sales database users will query against
+      TARGET_DATABASE_URL: postgresql://sales_user:sales_pass@salesdb:5432/sales
+      # Azure OpenAI — set these in a .env file in the project root
+      AZURE_OPENAI_ENDPOINT:    ${AZURE_OPENAI_ENDPOINT}
+      AZURE_OPENAI_API_KEY:     ${AZURE_OPENAI_API_KEY}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-08-01-preview}
+      AZURE_CHAT_DEPLOYMENT:    ${AZURE_CHAT_DEPLOYMENT:-gpt-4o}
+      AZURE_EMBED_DEPLOYMENT:   ${AZURE_EMBED_DEPLOYMENT:-text-embedding-3-small}
+    depends_on:
+      db:
+        condition: service_healthy
+      salesdb:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ── React frontend ────────────────────────────────────────────────────────────
+  frontend:
+    image: node:20-alpine
+    container_name: sqlassistant_frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  salesdata:

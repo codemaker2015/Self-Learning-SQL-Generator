@@ -1,0 +1,44 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.DS_Store
+.vscode/
+/dist
+/build
+/.cache
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.env
+env/
+venv/
+.venv/
+
+# Docker
+docker-compose.override.yml
+*.log
+
+# IDEs
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Generated files
+*.sqlite3
+*.db
+
+# Local environment files
+.env
+*.local
+
+# Misc
+*.swp
+*~
